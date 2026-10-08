@@ -1,0 +1,15 @@
+# Non-secret settings. Change a value here, re-apply, and restart the
+# Deployment (kubectl rollout restart) to pick it up.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-config
+  namespace: payments
+data:
+  APP_VERSION: "1.0.0"
+  DB_HOST: "postgres"          # the Service name of the database
+  DB_PORT: "5432"
+  DB_NAME: "payments"
+  DB_USER: "payments"
+  RISK_CHECK_ITERATIONS: "20000"   # CPU cost of the simulated fraud check
+  CHAOS_ENABLED: "true"        # allows the hang drill; set "false" for real use

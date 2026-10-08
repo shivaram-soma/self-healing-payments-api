@@ -1,0 +1,45 @@
+# Used by the "traffic-spike" drill (scripts/drills.py), not by `cluster.py up`.
+# Four small pods send payments as fast as they can for DURATION seconds.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test
+  namespace: payments
+spec:
+  parallelism: 4
+  completions: 4
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      labels:
+        app: load-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load
+          image: busybox:1.36
+          env:
+            - name: DURATION
+              value: "120"
+          command:
+            - sh
+            - -c
+            - |
+              end=$(( $(date +%s) + DURATION ))
+              sent=0
+              while [ "$(date +%s)" -lt "$end" ]; do
+                wget -q -O /dev/null -T 5 \
+                  --header "Content-Type: application/json" \
+                  --post-data '{"amount":"1.00","currency":"SGD","description":"load test"}' \
+                  http://payments-api/payments || true
+                sent=$((sent + 1))
+              done
+              echo "sent $sent requests"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 16Mi
+            limits:
+              cpu: 250m
+              memory: 32Mi

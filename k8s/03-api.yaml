@@ -1,0 +1,86 @@
+# The payments API: 2 copies (replicas) behind one Service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: payments
+  labels:
+    app: payments-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 60      # a release that never becomes ready is marked failed after 60s
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0            # never remove an old pod before a new one is ready
+      maxSurge: 1                  # add one new pod at a time
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+      annotations:                 # tells Prometheus to scrape this pod
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 20   # time allowed to shut down before a hard kill
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: api
+          image: payments-api:1.0.0
+          imagePullPolicy: IfNotPresent   # the image is imported into k3d, not pulled
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: payments-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+          # Liveness: "is the process stuck?" -> if it fails 3 times, restart the container.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # Readiness: "can it serve traffic?" -> if it fails, stop sending it requests.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          resources:
+            requests:              # what the scheduler reserves (HPA % is based on this)
+              cpu: 100m
+              memory: 128Mi
+            limits:                # the most it may use
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: payments
+spec:
+  selector:
+    app: payments-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

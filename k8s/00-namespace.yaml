@@ -1,0 +1,6 @@
+# Everything for this project lives in one namespace,
+# so it is easy to look at and easy to delete.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
